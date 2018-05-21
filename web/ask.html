@@ -154,7 +154,7 @@
 
         function loadAnswers() {
             daskContract
-                .QuestionAnswered({}, { fromBlock: 0, toBlock: 'latest' })
+                .QuestionAnswered({ askedBy: web3.eth.accounts[0] }, { fromBlock: 0, toBlock: 'latest' })
                 .watch((error, event) => {
                     answers[event.args.text] = answers[event.args.text] || []
                     answers[event.args.text].push(event.args.answer)
