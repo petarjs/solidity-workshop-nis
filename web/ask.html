@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Dask - Ask page</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="//fonts.googleapis.com/css?family=Roboto:300,300italic,700,700italic">
+    <link rel="stylesheet" href="//cdn.rawgit.com/necolas/normalize.css/master/normalize.css">
+    <link rel="stylesheet" href="//cdn.rawgit.com/milligram/milligram/master/dist/milligram.min.css">
+    <style>
+        body {
+            padding: 50px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .loader {
+            width: 30px;
+            height: 30px;
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background-color: violet;
+            animation: spin 1s ease-in-out infinite;
+            display: none;
+        }
+
+        .loader.loader--visible {
+            display: inline-block;
+        }
+
+        .question {
+            padding: 20px;
+            border-radius: 6px;
+            border: 1px solid lightgrey;
+            margin: 10px;
+            max-width: 200px;
+            text-align: center;
+        }
+
+        .answers {
+            display: flex;
+        }
+
+        .questionText {
+            font-size: 20px;
+        }
+
+        .avgAnswer {
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Ask the question!</h1>
+
+    <h4 class="balance">Balance: ...</h4>
+
+    <hr>
+
+    <input class="text"  placeholder="text" />
+    <input class="maxAnswers" placeholder="maxAnswers" />
+    <button class="ask">Ask the question</button>
+
+    <hr>
+
+    <h2>Your answers:</h2>
+    <div class="answers"></div>
+
+    <div class="loader"></div>
+
+    <script>
+       class Loader {
+            static show() {
+                $loader.classList.add('loader--visible')
+            }
+            
+            static hide() {
+                $loader.classList.remove('loader--visible')
+            }
+        }
+    </script>
+
+    <script>
+        const $ = document.querySelector.bind(document)
+
+        const $loader = $('.loader')
+        const $text = $('.text')
+        const $maxAnswers = $('.maxAnswers')
+        const $answers = $('.answers')
+
+        const answers = {}
+
+        let abi = [ { "inputs": [], "payable": false, "stateMutability": "nonpayable", "type": "constructor" }, { "anonymous": false, "inputs": [ { "indexed": false, "name": "price", "type": "uint256" } ], "name": "PricePerAnswerSet", "type": "event" }, { "anonymous": false, "inputs": [ { "indexed": false, "name": "askedBy", "type": "address" }, { "indexed": false, "name": "text", "type": "string" } ], "name": "QuestionAsked", "type": "event" }, { "anonymous": false, "inputs": [ { "indexed": false, "name": "askedBy", "type": "address" }, { "indexed": false, "name": "text", "type": "string" }, { "indexed": false, "name": "answer", "type": "uint256" } ], "name": "QuestionAnswered", "type": "event" }, { "constant": false, "inputs": [ { "name": "price", "type": "uint256" } ], "name": "setPricePerAnswer", "outputs": [], "payable": false, "stateMutability": "nonpayable", "type": "function" }, { "constant": true, "inputs": [], "name": "getPricePerAnswer", "outputs": [ { "name": "", "type": "uint256" } ], "payable": false, "stateMutability": "view", "type": "function" }, { "constant": false, "inputs": [ { "name": "text", "type": "string" }, { "name": "maxAnswers", "type": "uint256" } ], "name": "askQuestion", "outputs": [], "payable": true, "stateMutability": "payable", "type": "function" }, { "constant": false, "inputs": [ { "name": "askedBy", "type": "address" }, { "name": "text", "type": "string" }, { "name": "answer", "type": "uint256" } ], "name": "answerQuestion", "outputs": [], "payable": false, "stateMutability": "nonpayable", "type": "function" } ]
+        let address = '0x345ca3e014aaf5dca488057592ee47305d9b3e10'
+
+        let daskContract = web3.eth.contract(abi).at(address)
+
+        function loadBalance() {
+            Loader.show()
+            web3.eth
+                .getBalance(web3.eth.accounts[0], (err, balance) => {
+                    setBalance(balance)
+                    Loader.hide()
+                })
+        }
+
+        function setBalance(balance) {
+            $('.balance').innerHTML = `Balance: ${balance} wei`
+        }
+
+        function askQuestion() {
+            let text = $text.value
+            let maxAnswers = $maxAnswers.value
+
+            Loader.show()
+
+            daskContract
+                .getPricePerAnswer((error, price) => {
+                    daskContract
+                        .askQuestion(text, maxAnswers, { value: price * maxAnswers }, (e, r) => {
+                            console.log(e, r)
+                            Loader.hide()
+                        })
+                })
+        }
+
+        function renderAnswers(answers) {
+            $answers.innerHTML = ''
+            Object.keys(answers).forEach(question => {
+                let questionAnswers = answers[question]
+                let qa = document.createElement('div')
+                qa.classList.add('question')
+                let avgAnswer = questionAnswers.reduce((acc, a) => a.toNumber() + acc, 0) / questionAnswers.length
+                qa.innerHTML = `
+                    <div class="questionText">${question}?</div>
+                    <div class="avgAnswer">${avgAnswer}</div>
+                `
+                $answers.appendChild(qa)
+            })
+        }
+
+        function loadAnswers() {
+            daskContract
+                .QuestionAnswered({}, { fromBlock: 0, toBlock: 'latest' })
+                .watch((error, event) => {
+                    answers[event.args.text] = answers[event.args.text] || []
+                    answers[event.args.text].push(event.args.answer)
+                    renderAnswers(answers)
+                })
+        }
+
+        document.body.onload = () => {
+            loadBalance()
+            loadAnswers()
+
+            $('.ask').addEventListener('click', _ => askQuestion())
+        }
+    </script>
+</body>
+</html>
